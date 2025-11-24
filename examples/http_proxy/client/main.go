@@ -129,10 +129,10 @@ func handleHTTPSConnect(ctx context.Context, clientConn net.Conn, koriaClient *t
 	// Формат: CONNECT <host>\n
 	fmt.Fprintf(koriaStream, "CONNECT %s\n", targetHost)
 
-	// Читаем ответ от сервера
-	response := make([]byte, 1024)
-	n, err := koriaStream.Read(response)
-	if err != nil || !strings.HasPrefix(string(response[:n]), "OK") {
+	// Читаем ответ от сервера (используем bufio для чтения полной строки)
+	streamReader := bufio.NewReader(koriaStream)
+	response, err := streamReader.ReadString('\n')
+	if err != nil || !strings.HasPrefix(response, "OK") {
 		log.Printf("Server connection failed: %v", err)
 		clientConn.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
 		return
@@ -154,10 +154,10 @@ func handleHTTPSConnect(ctx context.Context, clientConn net.Conn, koriaClient *t
 		koriaStream.Close()
 	}()
 
-	// Server -> Client
+	// Server -> Client (используем streamReader для чтения, чтобы не потерять буферизованные данные)
 	go func() {
 		defer wg.Done()
-		io.Copy(clientConn, koriaStream)
+		io.Copy(clientConn, streamReader)
 		clientConn.Close()
 	}()
 
@@ -180,10 +180,10 @@ func handleHTTPRequest(ctx context.Context, clientConn net.Conn, koriaClient *tr
 	// Формат: HTTP <method> <host> <path>\n
 	fmt.Fprintf(koriaStream, "HTTP %s %s %s\n", req.Method, req.Host, req.RequestURI)
 
-	// Читаем подтверждение
-	response := make([]byte, 1024)
-	n, err := koriaStream.Read(response)
-	if err != nil || !strings.HasPrefix(string(response[:n]), "OK") {
+	// Читаем подтверждение (используем bufio для чтения полной строки)
+	streamReader := bufio.NewReader(koriaStream)
+	response, err := streamReader.ReadString('\n')
+	if err != nil || !strings.HasPrefix(response, "OK") {
 		clientConn.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
 		return
 	}
@@ -194,7 +194,7 @@ func handleHTTPRequest(ctx context.Context, clientConn net.Conn, koriaClient *tr
 		return
 	}
 
-	// Копируем ответ обратно клиенту
-	io.Copy(clientConn, koriaStream)
+	// Копируем ответ обратно клиенту (используем streamReader для чтения)
+	io.Copy(clientConn, streamReader)
 	log.Printf("✓ HTTP request completed for %s", req.Host)
 }

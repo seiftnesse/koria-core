@@ -35,7 +35,9 @@ func (e *Encoder) EncodeFrame(frame *Frame) (*c2s.PlayerMovePacket, error) {
 	basePitch := e.rand.Float32()*180.0 - 90.0
 
 	// Подготавливаем данные для кодирования (заголовок + данные)
-	encodedData := make([]byte, HeaderSize+len(frame.Data))
+	// ВАЖНО: Используем только 16 байт (X+Y+Z+Yaw+Pitch), Flags не используем для данных
+	// т.к. в Flags кодируются только младшие 2 бита (onGround flag для Minecraft)
+	encodedData := make([]byte, 16)
 
 	// Заголовок фрейма
 	binary.BigEndian.PutUint16(encodedData[0:2], frame.StreamID)
@@ -43,7 +45,7 @@ func (e *Encoder) EncodeFrame(frame *Frame) (*c2s.PlayerMovePacket, error) {
 	encodedData[4] = frame.Flags
 	binary.BigEndian.PutUint16(encodedData[5:7], uint16(len(frame.Data)))
 
-	// Данные
+	// Данные (остальное заполнено нулями автоматически при make)
 	copy(encodedData[7:], frame.Data)
 
 	// Создаем пакет
@@ -113,7 +115,9 @@ func (e *Encoder) EncodeFrame(frame *Frame) (*c2s.PlayerMovePacket, error) {
 
 const (
 	// MaxDataPerPlayerMove максимум данных в PlayerMovePacket после заголовка
-	MaxDataPerPlayerMove = 10 // 17 байт всего - 7 байт заголовок = 10 байт данных
+	// 16 байт всего (X+Y+Z+Yaw+Pitch) - 7 байт заголовок = 9 байт данных
+	// Flags не используется для данных т.к. кодируется только младшими 2 битами
+	MaxDataPerPlayerMove = 9
 )
 
 // encodeDataInDouble кодирует данные в младшие 32 бита мантиссы double

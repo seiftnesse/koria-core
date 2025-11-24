@@ -57,6 +57,11 @@ func (d *Decoder) DecodeFrame(pkt *c2s.PlayerMovePacket) (*Frame, error) {
 	dataLen := binary.BigEndian.Uint16(encodedData[5:7])
 	frame.Length = dataLen
 
+	// DEBUG: Логируем декодированные данные
+	// log.Printf("[DEBUG DECODER] encodedData (17 bytes): %v", encodedData)
+	// log.Printf("[DEBUG DECODER] StreamID=%d, Seq=%d, Flags=0x%02X, DataLen=%d",
+	// 	frame.StreamID, frame.Sequence, frame.Flags, dataLen)
+
 	// Извлекаем данные
 	if dataLen > 0 {
 		if HeaderSize+int(dataLen) > len(encodedData) {
