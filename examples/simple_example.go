@@ -8,6 +8,8 @@ import (
 	"koria-core/config"
 	"koria-core/transport"
 	"log"
+	"net"
+	"sync"
 	"time"
 )
 
@@ -76,14 +78,15 @@ func handleServerStreams(server *transport.Server) {
 		log.Printf("Accepted new virtual stream from %s", stream.RemoteAddr())
 
 		// Обрабатываем поток в отдельной горутине
-		go func() {
-			defer stream.Close()
+		go func(s net.Conn) {
+			defer s.Close()
 
 			// Echo server - возвращаем все данные обратно
 			buf := make([]byte, 4096)
 			for {
-				n, err := stream.Read(buf)
+				n, err := s.Read(buf)
 				if err != nil {
+					// EOF - нормальное закрытие, не логируем
 					if err != io.EOF {
 						log.Printf("Stream read error: %v", err)
 					}
@@ -93,12 +96,12 @@ func handleServerStreams(server *transport.Server) {
 				log.Printf("Received %d bytes: %s", n, string(buf[:n]))
 
 				// Отправляем обратно
-				if _, err := stream.Write(buf[:n]); err != nil {
-					log.Printf("Stream write error: %v", err)
+				if _, err := s.Write(buf[:n]); err != nil {
+					// Клиент мог закрыть соединение
 					return
 				}
 			}
-		}()
+		}(stream)
 	}
 }
 
@@ -125,9 +128,15 @@ func runClient(userID uuid.UUID) {
 	numStreams := 10
 	log.Printf("Opening %d virtual streams through ONE TCP connection...", numStreams)
 
+	// Используем WaitGroup для ожидания завершения всех горутин
+	var wg sync.WaitGroup
+	wg.Add(numStreams)
+
 	for i := 0; i < numStreams; i++ {
 		streamID := i
 		go func() {
+			defer wg.Done()
+
 			// Открываем виртуальный поток
 			stream, err := client.DialStream(ctx)
 			if err != nil {
@@ -157,8 +166,8 @@ func runClient(userID uuid.UUID) {
 		}()
 	}
 
-	// Ждем завершения работы потоков
-	time.Sleep(5 * time.Second)
+	// Ждем завершения работы всех потоков
+	wg.Wait()
 
 	log.Printf("Active streams: %d", client.StreamCount())
 	log.Println("Test completed!")

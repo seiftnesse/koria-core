@@ -9,8 +9,9 @@ import (
 	"koria-core/protocol/minecraft/packets/common"
 	s2c "koria-core/protocol/minecraft/packets/s2c"
 	"koria-core/protocol/multiplexer"
+	"koria-core/stats"
+	"log"
 	"net"
-	"strings"
 )
 
 // Client представляет клиента протокола
@@ -33,23 +34,28 @@ func Dial(ctx context.Context, config *ClientConfig) (*Client, error) {
 	addr := fmt.Sprintf("%s:%d", config.ServerAddr, config.ServerPort)
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
+		stats.Global().IncrementConnectionErrors()
 		return nil, fmt.Errorf("dial TCP: %w", err)
 	}
 
 	// 2. Выполняем Minecraft handshake
 	if err := performHandshake(conn, config); err != nil {
 		conn.Close()
+		stats.Global().IncrementConnectionErrors()
 		return nil, fmt.Errorf("handshake: %w", err)
 	}
 
 	// 3. Выполняем login с UUID аутентификацией
 	if err := performLogin(conn, config.UserID); err != nil {
 		conn.Close()
+		stats.Global().IncrementFailedConnections()
+		stats.Global().IncrementConnectionErrors()
 		return nil, fmt.Errorf("login: %w", err)
 	}
 
 	// 4. Создаем мультиплексор для управления виртуальными потоками
 	mux := multiplexer.NewMultiplexer(conn)
+	stats.Global().IncrementConnections()
 
 	client := &Client{
 		config: config,
@@ -67,6 +73,7 @@ func (c *Client) DialStream(ctx context.Context) (net.Conn, error) {
 
 // Close закрывает клиента и все виртуальные потоки
 func (c *Client) Close() error {
+	stats.Global().DecrementConnections()
 	return c.mux.Close()
 }
 
@@ -102,15 +109,19 @@ func performLogin(conn net.Conn, userID uuid.UUID) error {
 		UUID:     userID,
 	}
 
+	log.Printf("[DEBUG CLIENT] Sending LoginStart with UUID %s", userID)
 	if err := minecraft.WritePacket(conn, loginStart); err != nil {
 		return fmt.Errorf("write login start packet: %w", err)
 	}
 
 	// Ждем ответ от сервера (LoginSuccess или LoginDisconnect)
+	log.Printf("[DEBUG CLIENT] Waiting for login response...")
 	packetID, data, err := minecraft.ReadPacketRaw(conn)
 	if err != nil {
+		log.Printf("[DEBUG CLIENT] ReadPacketRaw error: %v", err)
 		return fmt.Errorf("read login response: %w", err)
 	}
+	log.Printf("[DEBUG CLIENT] Received packet 0x%02X", packetID)
 
 	switch packetID {
 	case minecraft.PacketTypeLoginSuccess:

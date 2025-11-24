@@ -7,6 +7,8 @@ import (
 	"koria-core/protocol/minecraft"
 	c2s "koria-core/protocol/minecraft/packets/c2s"
 	"koria-core/protocol/steganography"
+	"koria-core/stats"
+	"log"
 	"net"
 	"sync"
 	"time"
@@ -101,12 +103,15 @@ func (m *Multiplexer) OpenStream(ctx context.Context) (*Stream, error) {
 	// Ждем SYN-ACK с таймаутом
 	select {
 	case <-stream.synAckCh:
+		stats.Global().IncrementStreams()
 		return stream, nil
 	case <-ctx.Done():
 		m.closeStream(streamID)
+		stats.Global().IncrementStreamErrors()
 		return nil, ctx.Err()
 	case <-time.After(10 * time.Second):
 		m.closeStream(streamID)
+		stats.Global().IncrementStreamErrors()
 		return nil, fmt.Errorf("timeout waiting for SYN-ACK")
 	}
 }
@@ -125,21 +130,27 @@ func (m *Multiplexer) AcceptStream() (*Stream, error) {
 func (m *Multiplexer) readLoop() {
 	defer m.Close()
 
+	log.Printf("[DEBUG MUX] readLoop started for %s", m.conn.RemoteAddr())
+
 	for {
 		select {
 		case <-m.closeCh:
+			log.Printf("[DEBUG MUX] readLoop: closeCh signaled for %s", m.conn.RemoteAddr())
 			return
 		default:
 		}
 
 		// Читаем Minecraft пакет
+		log.Printf("[DEBUG MUX] readLoop: waiting for packet from %s", m.conn.RemoteAddr())
 		packetID, data, err := minecraft.ReadPacketRaw(m.conn)
 		if err != nil {
+			log.Printf("[DEBUG MUX] readLoop: ReadPacketRaw error for %s: %v", m.conn.RemoteAddr(), err)
 			if err != io.EOF {
 				// log error
 			}
 			return
 		}
+		log.Printf("[DEBUG MUX] readLoop: received packet 0x%02X from %s", packetID, m.conn.RemoteAddr())
 
 		// Декодируем фрейм из пакета в зависимости от типа
 		var frame *steganography.Frame
@@ -268,7 +279,14 @@ func (m *Multiplexer) sendFrame(frame *steganography.Frame) error {
 // closeStream удаляет поток из карты
 func (m *Multiplexer) closeStream(streamID uint16) {
 	m.streamsMu.Lock()
-	delete(m.streams, streamID)
+	stream, exists := m.streams[streamID]
+	if exists {
+		delete(m.streams, streamID)
+		// Декрементируем только если поток был в активном состоянии
+		if stream.state == StreamStateOpen {
+			stats.Global().DecrementStreams()
+		}
+	}
 	m.streamsMu.Unlock()
 }
 
@@ -308,4 +326,9 @@ func (m *Multiplexer) IsClosed() bool {
 	m.closedMu.RLock()
 	defer m.closedMu.RUnlock()
 	return m.closed
+}
+
+// CloseCh возвращает канал который закрывается когда мультиплексор закрывается
+func (m *Multiplexer) CloseCh() <-chan struct{} {
+	return m.closeCh
 }

@@ -3,6 +3,7 @@ package multiplexer
 import (
 	"io"
 	"koria-core/protocol/steganography"
+	"koria-core/stats"
 	"net"
 	"sync"
 	"time"
@@ -76,6 +77,7 @@ func (s *Stream) Read(p []byte) (int, error) {
 				// Буфер полон, теряем данные (не должно происходить при правильном использовании)
 			}
 		}
+		stats.Global().AddBytesReceived(uint64(n))
 		return n, nil
 	case <-s.closeCh:
 		return 0, io.EOF
@@ -129,6 +131,7 @@ func (s *Stream) Write(p []byte) (int, error) {
 		written += chunkSize
 	}
 
+	stats.Global().AddBytesSent(uint64(written))
 	return written, nil
 }
 
