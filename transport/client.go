@@ -12,6 +12,7 @@ import (
 	"koria-core/stats"
 	"log"
 	"net"
+	"time"
 )
 
 // Client представляет клиента протокола
@@ -36,6 +37,12 @@ func Dial(ctx context.Context, config *ClientConfig) (*Client, error) {
 	if err != nil {
 		stats.Global().IncrementConnectionErrors()
 		return nil, fmt.Errorf("dial TCP: %w", err)
+	}
+
+	// Включаем TCP keep-alive для предотвращения обрыва соединения
+	if tcpConn, ok := conn.(*net.TCPConn); ok {
+		tcpConn.SetKeepAlive(true)
+		tcpConn.SetKeepAlivePeriod(30 * time.Second)
 	}
 
 	// 2. Выполняем Minecraft handshake

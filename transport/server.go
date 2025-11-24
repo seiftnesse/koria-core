@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"time"
 )
 
 // Server представляет сервер протокола
@@ -74,6 +75,13 @@ func (s *Server) Serve() error {
 // handleConnection обрабатывает входящее TCP соединение
 func (s *Server) handleConnection(conn net.Conn) {
 	log.Printf("[DEBUG HANDLE] handleConnection started for %s", conn.RemoteAddr())
+
+	// Включаем TCP keep-alive для предотвращения обрыва соединения
+	if tcpConn, ok := conn.(*net.TCPConn); ok {
+		tcpConn.SetKeepAlive(true)
+		tcpConn.SetKeepAlivePeriod(30 * time.Second)
+	}
+
 	stats.Global().IncrementConnections()
 	defer func() {
 		log.Printf("[DEBUG HANDLE] handleConnection exiting for %s", conn.RemoteAddr())

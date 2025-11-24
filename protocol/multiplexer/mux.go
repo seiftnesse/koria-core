@@ -36,6 +36,10 @@ type Multiplexer struct {
 	decoder  *steganography.Decoder
 	selector *steganography.PacketSelector
 
+	// Мьютекс для защиты записи в TCP соединение
+	// КРИТИЧНО: без этого пакеты от разных горутин перемешиваются!
+	writeMu sync.Mutex
+
 	// Состояние
 	closed   bool
 	closedMu sync.RWMutex
@@ -251,6 +255,9 @@ func (m *Multiplexer) sendFrame(frame *steganography.Frame) error {
 	// Выбираем тип пакета на основе размера данных
 	packetType := m.selector.SelectPacketType(len(frame.Data))
 
+	log.Printf("[DEBUG SENDFRAME] StreamID=%d, Seq=%d, DataLen=%d, SelectedPacket=0x%02X",
+		frame.StreamID, frame.Sequence, len(frame.Data), packetType)
+
 	var packet minecraft.Packet
 	var err error
 
@@ -268,10 +275,18 @@ func (m *Multiplexer) sendFrame(frame *steganography.Frame) error {
 		return fmt.Errorf("encode frame: %w", err)
 	}
 
+	// КРИТИЧНО: Блокируем запись чтобы пакеты не перемешивались!
+	// Без этого при параллельной отправке из разных горутин
+	// пакеты могут перемешаться в TCP stream
+	m.writeMu.Lock()
+	defer m.writeMu.Unlock()
+
 	// Отправляем пакет
 	if err := minecraft.WritePacket(m.conn, packet); err != nil {
 		return fmt.Errorf("write packet: %w", err)
 	}
+
+	log.Printf("[DEBUG SENDFRAME] Sent packet 0x%02X successfully", packet.PacketID())
 
 	return nil
 }

@@ -13,7 +13,100 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 )
+
+// ReconnectingClient - обёртка для автоматического переподключения
+type ReconnectingClient struct {
+	config *transport.ClientConfig
+	client *transport.Client
+	mu     sync.RWMutex
+	ctx    context.Context
+}
+
+func NewReconnectingClient(ctx context.Context, config *transport.ClientConfig) (*ReconnectingClient, error) {
+	client, err := transport.Dial(ctx, config)
+	if err != nil {
+		return nil, err
+	}
+
+	rc := &ReconnectingClient{
+		config: config,
+		client: client,
+		ctx:    ctx,
+	}
+
+	return rc, nil
+}
+
+func (rc *ReconnectingClient) DialStream(ctx context.Context) (net.Conn, error) {
+	rc.mu.RLock()
+	client := rc.client
+	rc.mu.RUnlock()
+
+	stream, err := client.DialStream(ctx)
+	if err != nil {
+		// Пытаемся переподключиться
+		log.Printf("⚠ Stream dial failed, attempting reconnect...")
+		if reconnectErr := rc.reconnect(); reconnectErr != nil {
+			return nil, fmt.Errorf("dial stream failed and reconnect failed: %v, %v", err, reconnectErr)
+		}
+
+		// Повторная попытка после переподключения
+		rc.mu.RLock()
+		client = rc.client
+		rc.mu.RUnlock()
+
+		stream, err = client.DialStream(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("dial stream failed after reconnect: %w", err)
+		}
+	}
+
+	return stream, nil
+}
+
+func (rc *ReconnectingClient) reconnect() error {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+
+	// Закрываем старое соединение
+	if rc.client != nil {
+		rc.client.Close()
+	}
+
+	// Переподключаемся с экспоненциальным backoff
+	maxRetries := 5
+	for i := 0; i < maxRetries; i++ {
+		backoff := time.Duration(1<<uint(i)) * time.Second
+		if i > 0 {
+			log.Printf("⟳ Reconnecting in %v... (attempt %d/%d)", backoff, i+1, maxRetries)
+			time.Sleep(backoff)
+		}
+
+		client, err := transport.Dial(rc.ctx, rc.config)
+		if err != nil {
+			log.Printf("✗ Reconnect attempt %d failed: %v", i+1, err)
+			continue
+		}
+
+		rc.client = client
+		log.Println("✓ Reconnected successfully!")
+		return nil
+	}
+
+	return fmt.Errorf("failed to reconnect after %d attempts", maxRetries)
+}
+
+func (rc *ReconnectingClient) Close() error {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+
+	if rc.client != nil {
+		return rc.client.Close()
+	}
+	return nil
+}
 
 // HTTPProxyClient - HTTP/HTTPS proxy клиент с поддержкой CONNECT
 func main() {
@@ -42,7 +135,7 @@ func main() {
 	log.Println("")
 	log.Printf("Connecting to Koria server %s:%d...", *serverAddr, *serverPort)
 
-	// Подключаемся к Koria серверу
+	// Подключаемся к Koria серверу с автоматическим переподключением
 	ctx := context.Background()
 	clientConfig := &transport.ClientConfig{
 		ServerAddr: *serverAddr,
@@ -50,7 +143,7 @@ func main() {
 		UserID:     userID,
 	}
 
-	koriaClient, err := transport.Dial(ctx, clientConfig)
+	koriaClient, err := NewReconnectingClient(ctx, clientConfig)
 	if err != nil {
 		log.Printf("✗ Connection failed!")
 		log.Printf("✗ Error: %v", err)
@@ -66,6 +159,7 @@ func main() {
 
 	log.Println("✓ Connected to Koria server successfully!")
 	log.Println("✓ HTTP and HTTPS (CONNECT) proxy ready")
+	log.Println("✓ Auto-reconnect enabled")
 	log.Println("")
 	log.Println("Configure your browser:")
 	log.Printf("  HTTP Proxy: 127.0.0.1:%s", strings.Split(*listenAddr, ":")[1])
@@ -91,7 +185,7 @@ func main() {
 }
 
 // handleHTTPConnection обрабатывает HTTP/HTTPS запрос
-func handleHTTPConnection(ctx context.Context, clientConn net.Conn, koriaClient *transport.Client) {
+func handleHTTPConnection(ctx context.Context, clientConn net.Conn, koriaClient *ReconnectingClient) {
 	defer clientConn.Close()
 
 	// Читаем первую строку запроса
@@ -115,7 +209,7 @@ func handleHTTPConnection(ctx context.Context, clientConn net.Conn, koriaClient 
 }
 
 // handleHTTPSConnect обрабатывает HTTPS туннелинг через CONNECT
-func handleHTTPSConnect(ctx context.Context, clientConn net.Conn, koriaClient *transport.Client, targetHost string) {
+func handleHTTPSConnect(ctx context.Context, clientConn net.Conn, koriaClient *ReconnectingClient, targetHost string) {
 	// Открываем виртуальный поток через Koria
 	koriaStream, err := koriaClient.DialStream(ctx)
 	if err != nil {
@@ -166,7 +260,7 @@ func handleHTTPSConnect(ctx context.Context, clientConn net.Conn, koriaClient *t
 }
 
 // handleHTTPRequest обрабатывает обычный HTTP запрос
-func handleHTTPRequest(ctx context.Context, clientConn net.Conn, koriaClient *transport.Client, req *http.Request) {
+func handleHTTPRequest(ctx context.Context, clientConn net.Conn, koriaClient *ReconnectingClient, req *http.Request) {
 	// Открываем виртуальный поток
 	koriaStream, err := koriaClient.DialStream(ctx)
 	if err != nil {

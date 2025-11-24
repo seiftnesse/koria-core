@@ -40,13 +40,12 @@ func (p *CustomPayloadPacket) Decode(r io.Reader) error {
 	}
 	p.Channel = channel
 
-	// Читаем остальные данные (до MaxCustomPayloadSize)
-	data := make([]byte, MaxCustomPayloadSize)
-	n, err := r.Read(data)
-	if err != nil && err != io.EOF {
+	// Читаем остальные данные целиком
+	data, err := io.ReadAll(r)
+	if err != nil {
 		return err
 	}
-	p.Data = data[:n]
+	p.Data = data
 
 	return nil
 }
