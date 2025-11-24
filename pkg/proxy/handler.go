@@ -42,14 +42,9 @@ func (h *Handler) HandleConnection(ctx context.Context, clientConn net.Conn) err
 
 	log.Printf("Connected to upstream %s", h.upstreamAddr)
 
-	// Send fake handshake to establish Minecraft protocol appearance
-	handshake, err := minecraft.CreateHandshakePacket("localhost", 25565)
-	if err != nil {
-		return fmt.Errorf("failed to create handshake: %w", err)
-	}
-
-	// We don't actually send the handshake to upstream, it's just for protocol appearance
-	_ = handshake
+	// Note: In a real implementation, you might want to send a fake handshake
+	// to establish Minecraft protocol appearance for deep packet inspection.
+	// For now, we rely on the packet wrapping itself for camouflage.
 
 	// Bidirectional copy with Minecraft packet wrapping
 	var wg sync.WaitGroup

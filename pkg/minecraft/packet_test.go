@@ -2,6 +2,7 @@ package minecraft
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 )
 
@@ -68,7 +69,7 @@ func TestVarIntRoundTrip(t *testing.T) {
 	values := []int32{0, 1, 127, 128, 255, 256, 1000, 32767, 65535, 2097151}
 
 	for _, val := range values {
-		t.Run(string(rune(val)), func(t *testing.T) {
+		t.Run(fmt.Sprintf("value_%d", val), func(t *testing.T) {
 			// Encode
 			buf := new(bytes.Buffer)
 			err := writeVarInt(buf, val)

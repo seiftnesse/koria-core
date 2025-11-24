@@ -12,13 +12,16 @@ type PacketID byte
 
 const (
 	// Common Minecraft packet IDs for camouflage
-	PacketHandshake      PacketID = 0x00
-	PacketStatusRequest  PacketID = 0x00
-	PacketStatusResponse PacketID = 0x00
-	PacketPing           PacketID = 0x01
-	PacketPong           PacketID = 0x01
-	PacketKeepAlive      PacketID = 0x21
-	PacketCustomPayload  PacketID = 0x17 // For embedding our data
+	// Note: In real Minecraft protocol, packet IDs are context-dependent (state-based).
+	// The same ID can mean different things in different protocol states (handshaking, status, login, play).
+	// For our camouflage purposes, we primarily use PacketCustomPayload for data transmission.
+	PacketHandshake      PacketID = 0x00 // Handshaking state
+	PacketStatusRequest  PacketID = 0x00 // Status state
+	PacketStatusResponse PacketID = 0x00 // Status state
+	PacketPing           PacketID = 0x01 // Status state
+	PacketPong           PacketID = 0x01 // Status state
+	PacketKeepAlive      PacketID = 0x21 // Play state
+	PacketCustomPayload  PacketID = 0x17 // Play state - for embedding our data
 )
 
 // Packet represents a Minecraft protocol packet
