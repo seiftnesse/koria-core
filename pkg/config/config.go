@@ -13,11 +13,11 @@ type Config struct {
 	ListenAddress string        `json:"listen_address"`
 	UpstreamAddr  string        `json:"upstream_address"`
 	Timeout       time.Duration `json:"timeout"`
-	
+
 	// Minecraft camouflage settings
 	MinecraftServer string `json:"minecraft_server"`
 	MinecraftPort   uint16 `json:"minecraft_port"`
-	
+
 	// Logging
 	LogLevel string `json:"log_level"`
 }

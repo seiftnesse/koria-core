@@ -47,7 +47,7 @@ func (h *Handler) HandleConnection(ctx context.Context, clientConn net.Conn) err
 	if err != nil {
 		return fmt.Errorf("failed to create handshake: %w", err)
 	}
-	
+
 	// We don't actually send the handshake to upstream, it's just for protocol appearance
 	_ = handshake
 
@@ -95,7 +95,7 @@ func (h *Handler) HandleConnection(ctx context.Context, clientConn net.Conn) err
 // copyWithMinecraftEncoding copies data from src to dst, wrapping it in Minecraft packets
 func (h *Handler) copyWithMinecraftEncoding(dst io.Writer, src io.Reader, direction string) error {
 	buf := make([]byte, 32*1024) // 32KB buffer
-	
+
 	for {
 		n, err := src.Read(buf)
 		if n > 0 {
@@ -104,14 +104,14 @@ func (h *Handler) copyWithMinecraftEncoding(dst io.Writer, src io.Reader, direct
 			if encErr != nil {
 				return fmt.Errorf("encoding error: %w", encErr)
 			}
-			
+
 			if _, writeErr := dst.Write(encoded); writeErr != nil {
 				return fmt.Errorf("write error: %w", writeErr)
 			}
-			
+
 			log.Printf("%s: forwarded %d bytes (encoded to %d bytes)", direction, n, len(encoded))
 		}
-		
+
 		if err != nil {
 			if err == io.EOF {
 				return nil
@@ -124,7 +124,7 @@ func (h *Handler) copyWithMinecraftEncoding(dst io.Writer, src io.Reader, direct
 // copyWithMinecraftDecoding copies data from src to dst, unwrapping it from Minecraft packets
 func (h *Handler) copyWithMinecraftDecoding(dst io.Writer, src io.Reader, direction string) error {
 	reader := io.Reader(src)
-	
+
 	for {
 		// Decode Minecraft packet
 		packet, err := minecraft.DecodePacket(reader)
@@ -134,14 +134,14 @@ func (h *Handler) copyWithMinecraftDecoding(dst io.Writer, src io.Reader, direct
 			}
 			return fmt.Errorf("decoding error: %w", err)
 		}
-		
+
 		// Write the unwrapped data
 		if len(packet.Data) > 0 {
 			n, writeErr := dst.Write(packet.Data)
 			if writeErr != nil {
 				return fmt.Errorf("write error: %w", writeErr)
 			}
-			
+
 			log.Printf("%s: forwarded %d bytes (decoded from packet)", direction, n)
 		}
 	}

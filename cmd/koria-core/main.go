@@ -21,7 +21,7 @@ func main() {
 	upstreamAddr := flag.String("upstream", "", "Upstream server address")
 	showVersion := flag.Bool("version", false, "Show version information")
 	generateConfig := flag.String("generate-config", "", "Generate default config file")
-	
+
 	flag.Parse()
 
 	// Show version
