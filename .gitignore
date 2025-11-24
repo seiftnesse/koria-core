@@ -31,4 +31,4 @@ go.work.sum
 # .idea/
 # .vscode/
 example-config.json
-koria-core
+/koria-core
