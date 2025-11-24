@@ -14,27 +14,16 @@ func NewPacketSelector() *PacketSelector {
 
 // SelectPacketType выбирает тип пакета на основе размера данных
 func (ps *PacketSelector) SelectPacketType(dataSize int) minecraft.PacketType {
+	// ВАЖНО: На данный момент реализованы только PlayerMove и CustomPayload
+	// ChatMessage, PlayerAction, HandSwing пока не реализованы
 	switch {
-	case dataSize > 512:
-		// Большие блоки данных - CustomPayload (до 32KB)
+	case dataSize > MaxDataPerPlayerMove:
+		// Данные больше 9 байт - используем CustomPayload (до 32KB)
 		return minecraft.PacketTypeCustomPayload
 
-	case dataSize > 100:
-		// Средние блоки - ChatMessage (~256 байт)
-		return minecraft.PacketTypeChatMessage
-
-	case dataSize > 10:
-		// Мелкие данные - PlayerMove (17 байт полезной нагрузки)
-		// Но так как у нас overhead от заголовка (7 байт), реально ~10 байт
-		return minecraft.PacketTypePlayerMove
-
-	case dataSize > 4:
-		// Очень мелкие данные - PlayerAction (~12 байт)
-		return minecraft.PacketTypePlayerAction
-
 	default:
-		// Микроданные - HandSwing (1 байт)
-		return minecraft.PacketTypeHandSwing
+		// Данные <= 9 байт - используем PlayerMove
+		return minecraft.PacketTypePlayerMove
 	}
 }
 
@@ -44,17 +33,8 @@ func (ps *PacketSelector) GetMaxPayload(packetType minecraft.PacketType) int {
 	case minecraft.PacketTypeCustomPayload:
 		return 32760 // 32KB - заголовок фрейма
 
-	case minecraft.PacketTypeChatMessage:
-		return 200 // ~200 байт после заголовка и служебных полей
-
 	case minecraft.PacketTypePlayerMove:
-		return MaxDataPerPlayerMove // 10 байт
-
-	case minecraft.PacketTypePlayerAction:
-		return 5 // ~5 байт полезных данных
-
-	case minecraft.PacketTypeHandSwing:
-		return 1 // 1 байт
+		return MaxDataPerPlayerMove // 9 байт
 
 	default:
 		return MaxDataPerPlayerMove
