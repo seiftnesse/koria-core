@@ -6,6 +6,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -17,7 +19,7 @@ import (
 	"koria-core/config"
 	v2config "koria-core/config/v2"
 	"koria-core/proxy/freedom"
-	"koria-core/proxy/http"
+	proxyhttp "koria-core/proxy/http"
 	koriaproxy "koria-core/proxy/koria"
 	"koria-core/proxy/socks"
 	"koria-core/transport"
@@ -33,6 +35,7 @@ const banner = `
 func main() {
 	configFile := flag.String("config", "", "Configuration file path (JSON)")
 	version := flag.Bool("version", false, "Show version")
+	pprofAddr := flag.String("pprof", "", "Enable pprof on address (e.g., localhost:6060)")
 	flag.Parse()
 
 	if *version {
@@ -42,6 +45,14 @@ func main() {
 
 	if *configFile == "" {
 		log.Fatal("Usage: koria -config <config.json>")
+	}
+
+	// Запускаем pprof если указан
+	if *pprofAddr != "" {
+		go func() {
+			log.Printf("Starting pprof server on %s", *pprofAddr)
+			log.Println(http.ListenAndServe(*pprofAddr, nil))
+		}()
 	}
 
 	fmt.Print(banner)
@@ -91,8 +102,14 @@ func NewInstance(cfg *v2config.Config) (*Instance, error) {
 		ohm: outbound.NewManager(),
 	}
 
-	// Создаем dispatcher
-	instance.d = dispatcher.NewDefaultDispatcher(instance.ohm)
+	// Создаем router из конфигурации
+	router, err := dispatcher.NewRouter(cfg.Routing)
+	if err != nil {
+		return nil, fmt.Errorf("init router: %w", err)
+	}
+
+	// Создаем dispatcher с router
+	instance.d = dispatcher.NewDefaultDispatcher(instance.ohm, router)
 
 	// Инициализируем outbounds
 	if err := instance.initOutbounds(cfg.Outbounds); err != nil {
@@ -195,7 +212,7 @@ func (i *Instance) initInbounds(configs []v2config.InboundConfig) error {
 
 		switch cfg.Protocol {
 		case "http":
-			handler = http.NewServer(cfg.Tag, cfg.Listen, i.d)
+			handler = proxyhttp.NewServer(cfg.Tag, cfg.Listen, i.d)
 
 		case "socks":
 			handler = socks.NewServer(cfg.Tag, cfg.Listen, i.d)

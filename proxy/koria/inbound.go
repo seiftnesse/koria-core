@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"koria-core/app/dispatcher"
+	commio "koria-core/common/io"
 	commnet "koria-core/common/net"
+	"koria-core/app/dispatcher"
 	"koria-core/config"
 	"koria-core/transport"
 	"log"
@@ -170,28 +171,27 @@ func (s *Server) handleStream(stream net.Conn) {
 
 	log.Printf("[Koria Inbound:%s] Tunnel established to %s", s.tag, targetAddr)
 
-	// Туннелирование данных
+	// Туннелирование данных с оптимизацией
 	var wg sync.WaitGroup
 	wg.Add(2)
 
 	// Stream -> Target
 	go func() {
 		defer wg.Done()
-		written, _ := io.Copy(outConn, stream)
-		log.Printf("[Koria Inbound:%s] Stream -> %s: %d bytes", s.tag, targetAddr, written)
+		commio.Copy(outConn, stream)
 		outConn.Close()
 	}()
 
 	// Target -> Stream
 	go func() {
 		defer wg.Done()
-		written, _ := io.Copy(stream, outConn)
-		log.Printf("[Koria Inbound:%s] %s -> Stream: %d bytes", s.tag, targetAddr, written)
+		commio.Copy(stream, outConn)
 		stream.Close()
 	}()
 
 	wg.Wait()
-	log.Printf("[Koria Inbound:%s] Tunnel closed for %s", s.tag, targetAddr)
+	// Логируем только при debug
+	// log.Printf("[Koria Inbound:%s] Tunnel closed for %s", s.tag, targetAddr)
 }
 
 func min(a, b int) int {

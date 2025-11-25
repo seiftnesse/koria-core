@@ -69,11 +69,14 @@ func (s *Server) Serve() error {
 
 // handleConnection обрабатывает входящее TCP соединение
 func (s *Server) handleConnection(conn net.Conn) {
-
-	// Включаем TCP keep-alive для предотвращения обрыва соединения
+	// Оптимизируем TCP параметры для высокой производительности
+	// Это критично для снижения CPU при высоких нагрузках
 	if tcpConn, ok := conn.(*net.TCPConn); ok {
-		tcpConn.SetKeepAlive(true)
-		tcpConn.SetKeepAlivePeriod(30 * time.Second)
+		tcpConn.SetNoDelay(true)                        // Отключаем Nagle
+		tcpConn.SetKeepAlive(true)                      // Keep-alive
+		tcpConn.SetKeepAlivePeriod(30 * time.Second)    // Период
+		tcpConn.SetReadBuffer(512 * 1024)               // 512KB read buffer
+		tcpConn.SetWriteBuffer(512 * 1024)              // 512KB write buffer
 	}
 
 	stats.Global().IncrementConnections()

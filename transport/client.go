@@ -38,10 +38,13 @@ func Dial(ctx context.Context, config *ClientConfig) (*Client, error) {
 		return nil, fmt.Errorf("dial TCP: %w", err)
 	}
 
-	// Включаем TCP keep-alive для предотвращения обрыва соединения
+	// Оптимизируем TCP параметры для высокой производительности
 	if tcpConn, ok := conn.(*net.TCPConn); ok {
-		tcpConn.SetKeepAlive(true)
-		tcpConn.SetKeepAlivePeriod(30 * time.Second)
+		tcpConn.SetNoDelay(true)                        // Отключаем Nagle
+		tcpConn.SetKeepAlive(true)                      // Keep-alive
+		tcpConn.SetKeepAlivePeriod(30 * time.Second)    // Период
+		tcpConn.SetReadBuffer(512 * 1024)               // 512KB read buffer
+		tcpConn.SetWriteBuffer(512 * 1024)              // 512KB write buffer
 	}
 
 	// 2. Выполняем Minecraft handshake

@@ -5,8 +5,9 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"koria-core/app/dispatcher"
+	commio "koria-core/common/io"
 	commnet "koria-core/common/net"
+	"koria-core/app/dispatcher"
 	"log"
 	"net"
 	"sync"
@@ -135,24 +136,25 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 	log.Printf("[SOCKS5 Inbound:%s] Tunnel established to %s", s.tag, dest.String())
 
-	// Tunnel
+	// Tunnel с оптимизированным копированием
 	var wg sync.WaitGroup
 	wg.Add(2)
 
 	go func() {
 		defer wg.Done()
-		io.Copy(outConn, conn)
+		commio.Copy(outConn, conn)
 		outConn.Close()
 	}()
 
 	go func() {
 		defer wg.Done()
-		io.Copy(conn, outConn)
+		commio.Copy(conn, outConn)
 		conn.Close()
 	}()
 
 	wg.Wait()
-	log.Printf("[SOCKS5 Inbound:%s] Tunnel closed for %s", s.tag, dest.String())
+	// Логируем только при debug
+	// log.Printf("[SOCKS5 Inbound:%s] Tunnel closed for %s", s.tag, dest.String())
 }
 
 // handshake выполняет SOCKS5 handshake

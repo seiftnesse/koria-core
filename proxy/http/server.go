@@ -4,9 +4,9 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"io"
-	"koria-core/app/dispatcher"
+	commio "koria-core/common/io"
 	commnet "koria-core/common/net"
+	"koria-core/app/dispatcher"
 	"log"
 	"net"
 	"net/http"
@@ -148,24 +148,25 @@ func (s *Server) handleCONNECT(conn net.Conn, req *http.Request) {
 
 	log.Printf("[HTTP Inbound:%s] HTTPS tunnel established to %s", s.tag, req.Host)
 
-	// Туннелирование
+	// Туннелирование с оптимизированным копированием
 	var wg sync.WaitGroup
 	wg.Add(2)
 
 	go func() {
 		defer wg.Done()
-		io.Copy(outConn, conn)
+		commio.Copy(outConn, conn)
 		outConn.Close()
 	}()
 
 	go func() {
 		defer wg.Done()
-		io.Copy(conn, outConn)
+		commio.Copy(conn, outConn)
 		conn.Close()
 	}()
 
 	wg.Wait()
-	log.Printf("[HTTP Inbound:%s] HTTPS tunnel closed for %s", s.tag, req.Host)
+	// Логируем только при debug
+	// log.Printf("[HTTP Inbound:%s] HTTPS tunnel closed for %s", s.tag, req.Host)
 }
 
 // handleHTTP обрабатывает обычный HTTP запрос
@@ -212,7 +213,8 @@ func (s *Server) handleHTTP(conn net.Conn, reader *bufio.Reader, req *http.Reque
 		return
 	}
 
-	// Копируем ответ
-	io.Copy(conn, outConn)
-	log.Printf("[HTTP Inbound:%s] HTTP request completed for %s", s.tag, req.Host)
+	// Копируем ответ с оптимизацией
+	commio.Copy(conn, outConn)
+	// Логируем только при debug
+	// log.Printf("[HTTP Inbound:%s] HTTP request completed for %s", s.tag, req.Host)
 }
