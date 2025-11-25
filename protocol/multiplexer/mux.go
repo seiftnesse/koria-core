@@ -8,6 +8,7 @@ import (
 	c2s "koria-core/protocol/minecraft/packets/c2s"
 	"koria-core/protocol/steganography"
 	"koria-core/stats"
+	"log"
 	"net"
 	"sync"
 	"time"
@@ -131,11 +132,15 @@ func (m *Multiplexer) AcceptStream() (*Stream, error) {
 
 // readLoop читает пакеты из TCP соединения и демультиплексирует их
 func (m *Multiplexer) readLoop() {
-	defer m.Close()
+	defer func() {
+		log.Printf("[Multiplexer] readLoop exiting, closing multiplexer")
+		m.Close()
+	}()
 
 	for {
 		select {
 		case <-m.closeCh:
+			log.Printf("[Multiplexer] Close channel signaled, exiting readLoop")
 			return
 		default:
 		}
@@ -144,7 +149,9 @@ func (m *Multiplexer) readLoop() {
 		packetID, data, err := minecraft.ReadPacketRaw(m.conn)
 		if err != nil {
 			if err != io.EOF {
-				// log error
+				log.Printf("[Multiplexer] Error reading packet: %v", err)
+			} else {
+				log.Printf("[Multiplexer] Connection closed (EOF)")
 			}
 			return
 		}
@@ -156,24 +163,25 @@ func (m *Multiplexer) readLoop() {
 		case minecraft.PacketTypePlayerMove:
 			var pkt c2s.PlayerMovePacket
 			if err := minecraft.DecodePacket(&pkt, data); err != nil {
-				// log error, skip packet
+				log.Printf("[Multiplexer] Error decoding PlayerMove packet: %v", err)
 				continue
 			}
 			frame, err = m.decoder.DecodeFrame(&pkt)
 		case minecraft.PacketTypeCustomPayload:
 			var pkt c2s.CustomPayloadPacket
 			if err := minecraft.DecodePacket(&pkt, data); err != nil {
-				// log error, skip packet
+				log.Printf("[Multiplexer] Error decoding CustomPayload packet: %v", err)
 				continue
 			}
 			frame, err = m.decoder.DecodeFrameFromCustomPayload(&pkt)
 		default:
 			// Неизвестный тип пакета, пропускаем
+			log.Printf("[Multiplexer] Unknown packet type: 0x%02X, skipping", packetID)
 			continue
 		}
 
 		if err != nil {
-			// log error, skip packet
+			log.Printf("[Multiplexer] Error decoding frame: %v", err)
 			continue
 		}
 
@@ -241,6 +249,7 @@ func (m *Multiplexer) sendFrame(frame *steganography.Frame) error {
 	m.closedMu.RLock()
 	if m.closed {
 		m.closedMu.RUnlock()
+		log.Printf("[Multiplexer] Attempt to send frame on closed multiplexer (StreamID: %d)", frame.StreamID)
 		return io.ErrClosedPipe
 	}
 	m.closedMu.RUnlock()
@@ -262,6 +271,7 @@ func (m *Multiplexer) sendFrame(frame *steganography.Frame) error {
 	}
 
 	if err != nil {
+		log.Printf("[Multiplexer] Error encoding frame (StreamID: %d): %v", frame.StreamID, err)
 		return fmt.Errorf("encode frame: %w", err)
 	}
 
@@ -273,6 +283,7 @@ func (m *Multiplexer) sendFrame(frame *steganography.Frame) error {
 
 	// Отправляем пакет
 	if err := minecraft.WritePacket(m.conn, packet); err != nil {
+		log.Printf("[Multiplexer] Error writing packet (StreamID: %d): %v", frame.StreamID, err)
 		return fmt.Errorf("write packet: %w", err)
 	}
 

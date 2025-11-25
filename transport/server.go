@@ -9,6 +9,7 @@ import (
 	s2c "koria-core/protocol/minecraft/packets/s2c"
 	"koria-core/protocol/multiplexer"
 	"koria-core/stats"
+	"log"
 	"net"
 	"sync"
 	"time"
@@ -93,9 +94,16 @@ func (s *Server) handleConnection(conn net.Conn) {
 		return
 	}
 
+	// Проверяем NextState
+	if handshake.NextState == 1 {
+		// Status запрос (Server List Ping) - ДОЛЖНЫ ответить для маскировки!
+		s.handleStatusRequest(conn)
+		return
+	}
+
 	// Проверяем, что клиент хочет войти (NextState = 2)
 	if handshake.NextState != 2 {
-		// Это status запрос, не login - игнорируем
+		// Неизвестный NextState - игнорируем
 		return
 	}
 
@@ -231,4 +239,44 @@ func (s *Server) ConnectionCount() int {
 // Addr возвращает адрес на котором слушает сервер
 func (s *Server) Addr() string {
 	return s.listener.Addr().String()
+}
+
+// handleStatusRequest обрабатывает Status Request (Server List Ping)
+// КРИТИЧНО для маскировки под настоящий Minecraft сервер!
+func (s *Server) handleStatusRequest(conn net.Conn) {
+	// 1. Читаем Status Request (Packet ID 0x00, пустой)
+	packetID, _, err := minecraft.ReadPacketRaw(conn)
+	if err != nil || packetID != 0x00 {
+		return
+	}
+
+	// 2. Отправляем Status Response с реалистичными данными
+	statusResponse := s2c.NewStatusResponse(
+		"Minecraft Server", // Название сервера
+		20,                 // Max players
+		0,                  // Online players (0 для конспирации)
+	)
+
+	if err := minecraft.WritePacket(conn, statusResponse); err != nil {
+		log.Printf("Failed to send status response: %v", err)
+		return
+	}
+
+	log.Printf("Sent Status Response to %s (Server List Ping)", conn.RemoteAddr())
+
+	// 3. Читаем и декодируем Ping Request (Packet ID 0x01)
+	var pingReq c2s.PingRequestPacket
+	if err := minecraft.ReadPacket(conn, &pingReq); err != nil {
+		return
+	}
+
+	// 5. Отправляем Pong Response с тем же payload
+	pongResponse := &s2c.PongResponsePacket{
+		Payload: pingReq.Payload,
+	}
+
+	minecraft.WritePacket(conn, pongResponse)
+
+	// Закрываем соединение - Status Request завершен
+	conn.Close()
 }
