@@ -9,7 +9,6 @@ import (
 	s2c "koria-core/protocol/minecraft/packets/s2c"
 	"koria-core/protocol/multiplexer"
 	"koria-core/stats"
-	"log"
 	"net"
 	"sync"
 	"time"
@@ -52,12 +51,9 @@ func Listen(cfg *ServerConfig) (*Server, error) {
 
 // Serve начинает принимать соединения
 func (s *Server) Serve() error {
-	log.Printf("[DEBUG SERVE] Serve() started, waiting for connections...")
 	for {
-		log.Printf("[DEBUG SERVE] Calling Accept()...")
 		conn, err := s.listener.Accept()
 		if err != nil {
-			log.Printf("[DEBUG SERVE] Accept() error: %v", err)
 			select {
 			case <-s.closeCh:
 				return nil
@@ -66,7 +62,6 @@ func (s *Server) Serve() error {
 			}
 		}
 
-		log.Printf("[DEBUG SERVE] Accepted connection from %s, starting handleConnection...", conn.RemoteAddr())
 		// Обрабатываем соединение в отдельной горутине
 		go s.handleConnection(conn)
 	}
@@ -74,7 +69,6 @@ func (s *Server) Serve() error {
 
 // handleConnection обрабатывает входящее TCP соединение
 func (s *Server) handleConnection(conn net.Conn) {
-	log.Printf("[DEBUG HANDLE] handleConnection started for %s", conn.RemoteAddr())
 
 	// Включаем TCP keep-alive для предотвращения обрыва соединения
 	if tcpConn, ok := conn.(*net.TCPConn); ok {
@@ -84,34 +78,27 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 	stats.Global().IncrementConnections()
 	defer func() {
-		log.Printf("[DEBUG HANDLE] handleConnection exiting for %s", conn.RemoteAddr())
 		stats.Global().DecrementConnections()
 		conn.Close()
 	}()
 
 	// 1. Читаем и проверяем Handshake
-	log.Printf("[DEBUG HANDLE] Reading handshake from %s...", conn.RemoteAddr())
 	handshake, err := s.readHandshake(conn)
 	if err != nil {
-		log.Printf("[DEBUG HANDLE] Handshake error from %s: %v", conn.RemoteAddr(), err)
 		stats.Global().IncrementConnectionErrors()
 		// log error
 		return
 	}
-	log.Printf("[DEBUG HANDLE] Handshake OK from %s, NextState=%d", conn.RemoteAddr(), handshake.NextState)
 
 	// Проверяем, что клиент хочет войти (NextState = 2)
 	if handshake.NextState != 2 {
-		log.Printf("[DEBUG HANDLE] NextState != 2, ignoring status request")
 		// Это status запрос, не login - игнорируем
 		return
 	}
 
 	// 2. Читаем LoginStart и валидируем UUID
-	log.Printf("[DEBUG HANDLE] Reading and validating login from %s...", conn.RemoteAddr())
 	user, err := s.readAndValidateLogin(conn)
 	if err != nil {
-		log.Printf("[DEBUG HANDLE] Login validation failed for %s: %v", conn.RemoteAddr(), err)
 		// Отправляем disconnect
 		disconnect := &s2c.LoginDisconnectPacket{
 			Reason: fmt.Sprintf(`{"text":"Authentication failed: %s"}`, err.Error()),
@@ -121,10 +108,8 @@ func (s *Server) handleConnection(conn net.Conn) {
 		stats.Global().IncrementConnectionErrors()
 		return
 	}
-	log.Printf("[DEBUG HANDLE] Login OK for %s, user: %s", conn.RemoteAddr(), user.Email)
 
 	// 3. Отправляем LoginSuccess
-	log.Printf("[DEBUG HANDLE] Sending LoginSuccess to %s...", conn.RemoteAddr())
 	// Minecraft protocol ограничивает имя пользователя 16 символами
 	username := user.Email
 	if len(username) > 16 {
@@ -137,17 +122,13 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}
 
 	if err := minecraft.WritePacket(conn, success); err != nil {
-		log.Printf("[DEBUG HANDLE] Failed to write LoginSuccess to %s: %v", conn.RemoteAddr(), err)
 		return
 	}
-	log.Printf("[DEBUG HANDLE] LoginSuccess sent to %s", conn.RemoteAddr())
 
 	// 4. Создаем мультиплексор для этого соединения
-	log.Printf("[DEBUG HANDLE] Creating multiplexer for %s...", conn.RemoteAddr())
 	mux := multiplexer.NewMultiplexer(conn)
 
 	// DEBUG
-	log.Printf("[DEBUG] Created multiplexer for %s", conn.RemoteAddr())
 
 	// Регистрируем мультиплексор
 	connKey := conn.RemoteAddr().String()
@@ -155,7 +136,6 @@ func (s *Server) handleConnection(conn net.Conn) {
 	s.muxes[connKey] = mux
 	s.muxesMu.Unlock()
 
-	log.Printf("[DEBUG] Registered multiplexer, waiting for close...")
 
 	// Очистка при закрытии
 	defer func() {
@@ -174,12 +154,9 @@ func (s *Server) handleConnection(conn net.Conn) {
 	// Либо сервер остановится
 	select {
 	case <-mux.CloseCh():
-		log.Printf("[DEBUG] Multiplexer closed for %s", connKey)
 	case <-s.closeCh:
-		log.Printf("[DEBUG] Server shutting down")
 	}
 
-	log.Printf("[DEBUG] handleConnection exiting for %s", connKey)
 }
 
 // readHandshake читает и парсит handshake пакет
@@ -246,4 +223,9 @@ func (s *Server) ConnectionCount() int {
 	s.muxesMu.RLock()
 	defer s.muxesMu.RUnlock()
 	return len(s.muxes)
+}
+
+// Addr возвращает адрес на котором слушает сервер
+func (s *Server) Addr() string {
+	return s.listener.Addr().String()
 }

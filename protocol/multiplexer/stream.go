@@ -4,7 +4,6 @@ import (
 	"io"
 	"koria-core/protocol/steganography"
 	"koria-core/stats"
-	"log"
 	"net"
 	"sync"
 	"time"
@@ -123,10 +122,6 @@ func (s *Stream) Write(p []byte) (int, error) {
 			Data:     chunk,
 		}
 
-		// DEBUG: Логируем отправляемый фрейм
-		log.Printf("[DEBUG STREAM %d] Sending frame: Seq=%d, Len=%d, Data=%q",
-			s.id, frame.Sequence, frame.Length, string(frame.Data))
-
 		s.sequence++
 
 		// Отправляем фрейм через мультиплексор
@@ -203,10 +198,6 @@ func (s *Stream) handleFrame(frame *steganography.Frame) {
 
 	// DATA - обычные данные
 	if frame.Length > 0 && len(frame.Data) > 0 {
-		// DEBUG: Логируем входящий фрейм
-		log.Printf("[DEBUG STREAM %d] Received frame: Seq=%d, Len=%d, Data=%q",
-			s.id, frame.Sequence, frame.Length, string(frame.Data))
-
 		// Копируем данные (важно для избежания race conditions)
 		data := make([]byte, len(frame.Data))
 		copy(data, frame.Data)

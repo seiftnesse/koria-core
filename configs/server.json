@@ -1,0 +1,42 @@
+{
+  "log": {
+    "level": "info"
+  },
+  "inbounds": [
+    {
+      "tag": "koria-in",
+      "protocol": "koria",
+      "listen": "0.0.0.0:25565",
+      "settings": {
+        "clients": [
+          {
+            "id": "b0e5c6d7-89ab-4cde-f012-3456789abcde",
+            "email": "user1@koria.local",
+            "level": 0
+          },
+          {
+            "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            "email": "user2@koria.local",
+            "level": 0
+          }
+        ]
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "direct",
+      "protocol": "freedom",
+      "settings": {}
+    }
+  ],
+  "routing": {
+    "domainStrategy": "AsIs",
+    "rules": [
+      {
+        "type": "field",
+        "outboundTag": "direct"
+      }
+    ]
+  }
+}

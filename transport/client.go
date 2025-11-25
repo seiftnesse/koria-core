@@ -10,7 +10,6 @@ import (
 	s2c "koria-core/protocol/minecraft/packets/s2c"
 	"koria-core/protocol/multiplexer"
 	"koria-core/stats"
-	"log"
 	"net"
 	"time"
 )
@@ -116,19 +115,15 @@ func performLogin(conn net.Conn, userID uuid.UUID) error {
 		UUID:     userID,
 	}
 
-	log.Printf("[DEBUG CLIENT] Sending LoginStart with UUID %s", userID)
 	if err := minecraft.WritePacket(conn, loginStart); err != nil {
 		return fmt.Errorf("write login start packet: %w", err)
 	}
 
 	// Ждем ответ от сервера (LoginSuccess или LoginDisconnect)
-	log.Printf("[DEBUG CLIENT] Waiting for login response...")
 	packetID, data, err := minecraft.ReadPacketRaw(conn)
 	if err != nil {
-		log.Printf("[DEBUG CLIENT] ReadPacketRaw error: %v", err)
 		return fmt.Errorf("read login response: %w", err)
 	}
-	log.Printf("[DEBUG CLIENT] Received packet 0x%02X", packetID)
 
 	switch packetID {
 	case minecraft.PacketTypeLoginSuccess:

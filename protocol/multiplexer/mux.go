@@ -8,7 +8,6 @@ import (
 	c2s "koria-core/protocol/minecraft/packets/c2s"
 	"koria-core/protocol/steganography"
 	"koria-core/stats"
-	"log"
 	"net"
 	"sync"
 	"time"
@@ -134,27 +133,21 @@ func (m *Multiplexer) AcceptStream() (*Stream, error) {
 func (m *Multiplexer) readLoop() {
 	defer m.Close()
 
-	log.Printf("[DEBUG MUX] readLoop started for %s", m.conn.RemoteAddr())
-
 	for {
 		select {
 		case <-m.closeCh:
-			log.Printf("[DEBUG MUX] readLoop: closeCh signaled for %s", m.conn.RemoteAddr())
 			return
 		default:
 		}
 
 		// Читаем Minecraft пакет
-		log.Printf("[DEBUG MUX] readLoop: waiting for packet from %s", m.conn.RemoteAddr())
 		packetID, data, err := minecraft.ReadPacketRaw(m.conn)
 		if err != nil {
-			log.Printf("[DEBUG MUX] readLoop: ReadPacketRaw error for %s: %v", m.conn.RemoteAddr(), err)
 			if err != io.EOF {
 				// log error
 			}
 			return
 		}
-		log.Printf("[DEBUG MUX] readLoop: received packet 0x%02X from %s", packetID, m.conn.RemoteAddr())
 
 		// Декодируем фрейм из пакета в зависимости от типа
 		var frame *steganography.Frame
@@ -255,9 +248,6 @@ func (m *Multiplexer) sendFrame(frame *steganography.Frame) error {
 	// Выбираем тип пакета на основе размера данных
 	packetType := m.selector.SelectPacketType(len(frame.Data))
 
-	log.Printf("[DEBUG SENDFRAME] StreamID=%d, Seq=%d, DataLen=%d, SelectedPacket=0x%02X",
-		frame.StreamID, frame.Sequence, len(frame.Data), packetType)
-
 	var packet minecraft.Packet
 	var err error
 
@@ -285,8 +275,6 @@ func (m *Multiplexer) sendFrame(frame *steganography.Frame) error {
 	if err := minecraft.WritePacket(m.conn, packet); err != nil {
 		return fmt.Errorf("write packet: %w", err)
 	}
-
-	log.Printf("[DEBUG SENDFRAME] Sent packet 0x%02X successfully", packet.PacketID())
 
 	return nil
 }

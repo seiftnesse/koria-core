@@ -1,0 +1,52 @@
+{
+  "log": {
+    "level": "info"
+  },
+  "inbounds": [
+    {
+      "tag": "http-in",
+      "protocol": "http",
+      "listen": "127.0.0.1:8080",
+      "settings": {}
+    },
+    {
+      "tag": "socks-in",
+      "protocol": "socks",
+      "listen": "127.0.0.1:1080",
+      "settings": {}
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "koria-out",
+      "protocol": "koria",
+      "settings": {
+        "address": "your-server.com",
+        "port": 25565,
+        "userId": "b0e5c6d7-89ab-4cde-f012-3456789abcde"
+      }
+    },
+    {
+      "tag": "direct",
+      "protocol": "freedom",
+      "settings": {}
+    }
+  ],
+  "routing": {
+    "domainStrategy": "AsIs",
+    "rules": [
+      {
+        "type": "field",
+        "domain": [
+          "localhost",
+          "127.0.0.1"
+        ],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "outboundTag": "koria-out"
+      }
+    ]
+  }
+}
