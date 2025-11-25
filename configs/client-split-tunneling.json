@@ -1,0 +1,83 @@
+{
+  "log": {
+    "level": "info"
+  },
+  "inbounds": [
+    {
+      "tag": "http-in",
+      "protocol": "http",
+      "listen": "127.0.0.1:8080",
+      "settings": {}
+    },
+    {
+      "tag": "socks-in",
+      "protocol": "socks",
+      "listen": "127.0.0.1:1080",
+      "settings": {}
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "koria-out",
+      "protocol": "koria",
+      "settings": {
+        "address": "193.37.71.249",
+        "port": 25565,
+        "userId": "b0e5c6d7-89ab-4cde-f012-3456789abcde"
+      }
+    },
+    {
+      "tag": "direct",
+      "protocol": "freedom",
+      "settings": {}
+    }
+  ],
+  "routing": {
+    "domainStrategy": "AsIs",
+    "rules": [
+      {
+        "type": "field",
+        "domain": [
+          "localhost",
+          "127.0.0.1",
+          "*.local"
+        ],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "*.ru",
+          "*.рф",
+          "domain:yandex.ru",
+          "domain:vk.com",
+          "domain:mail.ru"
+        ],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "ip": [
+          "192.168.0.0/16",
+          "10.0.0.0/8",
+          "172.16.0.0/12"
+        ],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "*.google.com",
+          "*.youtube.com",
+          "*.twitter.com",
+          "*.facebook.com"
+        ],
+        "outboundTag": "koria-out"
+      },
+      {
+        "type": "field",
+        "outboundTag": "koria-out"
+      }
+    ]
+  }
+}

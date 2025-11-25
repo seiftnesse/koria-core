@@ -10,22 +10,36 @@ import (
 
 // DefaultDispatcher стандартный dispatcher
 type DefaultDispatcher struct {
-	ohm *outbound.Manager
+	ohm    *outbound.Manager
+	router *Router
 }
 
 // NewDefaultDispatcher создает новый dispatcher
-func NewDefaultDispatcher(ohm *outbound.Manager) *DefaultDispatcher {
+func NewDefaultDispatcher(ohm *outbound.Manager, router *Router) *DefaultDispatcher {
 	return &DefaultDispatcher{
-		ohm: ohm,
+		ohm:    ohm,
+		router: router,
 	}
 }
 
 // Dispatch создает соединение через outbound
 func (d *DefaultDispatcher) Dispatch(ctx context.Context, dest commnet.Destination) (net.Conn, error) {
-	// Используем дефолтный outbound
-	handler := d.ohm.GetDefaultHandler()
+	// Выбираем outbound через router
+	var handler outbound.Handler
+
+	if d.router != nil {
+		tag := d.router.MatchOutbound(dest)
+		if tag != "" {
+			handler = d.ohm.Select(tag)
+		}
+	}
+
+	// Если router не выбрал или не найден - используем default
 	if handler == nil {
-		return nil, fmt.Errorf("no default outbound handler")
+		handler = d.ohm.GetDefaultHandler()
+		if handler == nil {
+			return nil, fmt.Errorf("no default outbound handler")
+		}
 	}
 
 	return handler.Dial(ctx, dest)
